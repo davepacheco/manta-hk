@@ -15,38 +15,76 @@
  */
 
 var mod_bunyan = require('bunyan');
+var mod_cmdln = require('cmdln');
 var mod_cmdutil = require('cmdutil');
 var mod_extsprintf = require('extsprintf');
 var mod_jsprim = require('jsprim');
 var mod_http = require('http');
 var mod_manta = require('manta');
+var mod_util = require('util');
 var printf = mod_extsprintf.printf;
 
 var mod_dumps = require('../lib/dumps');
 
-function main()
+/*
+ * node-cmdln boilerplate
+ */
+function MantaHk()
 {
-	var log, manta, config;
+	mod_cmdln.Cmdln.call(this, {
+	    'name': 'manta-hk',
+	    'desc': 'manage Manta housekeeping operations'
+	});
+}
 
-	log = new mod_bunyan({
+mod_util.inherits(MantaHk, mod_cmdln.Cmdln);
+MantaHk.showErrStack = false;
+
+/*
+ * Initialization: set up logger and Manta client.
+ */
+MantaHk.prototype.init = function (opts, args, callback)
+{
+	this.mhk_log = new mod_bunyan({
 	    'name': 'manta-hk',
 	    'level': process.env['LOG_LEVEL'] || 'error'
 	});
 
-	manta = mod_manta.createBinClient({
-	    'log': log.child({ 'component': 'manta' })
+	this.mhk_manta = mod_manta.createBinClient({
+	    'log': this.mhk_log.child({ 'component': 'manta' })
 	});
 	/* Bad, manta client! */
 	process.removeAllListeners('uncaughtException');
 
+	callback();
+};
+
+/*
+ * Cleanup: close Manta client.
+ */
+MantaHk.prototype.fini = function (subcmd, _, callback)
+{
+	this.mhk_manta.close();
+	callback();
+};
+
+/*
+ * manta-hk dumps: list information about recent Manatee dumps
+ */
+MantaHk.prototype.do_dumps = function (subcmd, opts, args, callback)
+{
+	var config;
+
+	console.error(opts);
+	console.error(args);
 	config = {
-	    'endDate': new Date(),
-	    'ndays': 1,
-	    'shards': null,
+	    'endDate': opts.date,
+	    'ndays': opts.days,
+	    'shards': opts.shard,
 	    'dumpRoot': mod_dumps.defaultDumpRoot,
 	    'concurrency': 10,
-	    'log': log,
-	    'manta': manta
+	    'log': this.mhk_log,
+	    'manta': this.mhk_manta
 	};
 
 	mod_dumps.listDumps(config, function (err, results) {
@@ -55,8 +93,38 @@ function main()
 		}
 
 		console.error(results.dl_dumps);
-		manta.close();
+		callback();
 	});
-}
+};
 
-main();
+MantaHk.prototype.do_dumps.options = [ {
+    'names': [ 'date', 'd' ],
+    'type': 'date',
+    'helpArg': 'DATE',
+    'help': 'Scan backwards from date DATE',
+    'default': new Date()
+}, {
+    'names': [ 'days', 'D' ],
+    'type': 'positiveInteger',
+    'helpArg': 'NDAYS',
+    'help': 'Scan backwards NDAYS from DATE',
+    'default': 1
+}, {
+    'names': [ 'shard', 's' ],
+    'type': 'arrayOfString',
+    'helpArg': 'SHARD...',
+    'help': 'Only show dumps for shards SHARD...',
+    'default': null
+} ];
+
+MantaHk.prototype.do_dumps.help = [
+    'List Manatee dump information.',
+    '',
+    'The "dumps" command reports on Manatee dumps over the given date range.',
+    'In the default output mode, missing or late dumps are marked with an ',
+    'asterisk ("*").',
+    '',
+    '{{options}}'
+].join('\n');
+
+mod_cmdln.main(new MantaHk());
