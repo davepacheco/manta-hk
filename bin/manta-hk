@@ -14,9 +14,49 @@
  * manta-hk: manage Manta housekeeping operations
  */
 
+var mod_bunyan = require('bunyan');
+var mod_cmdutil = require('cmdutil');
+var mod_extsprintf = require('extsprintf');
+var mod_jsprim = require('jsprim');
+var mod_http = require('http');
+var mod_manta = require('manta');
+var printf = mod_extsprintf.printf;
+
+var mod_dumps = require('../lib/dumps');
+
 function main()
 {
+	var log, manta, config;
 
+	log = new mod_bunyan({
+	    'name': 'manta-hk',
+	    'level': process.env['LOG_LEVEL'] || 'error'
+	});
+
+	manta = mod_manta.createBinClient({
+	    'log': log.child({ 'component': 'manta' })
+	});
+	/* Bad, manta client! */
+	process.removeAllListeners('uncaughtException');
+
+	config = {
+	    'endDate': new Date(),
+	    'ndays': 1,
+	    'shards': null,
+	    'dumpRoot': mod_dumps.defaultDumpRoot,
+	    'concurrency': 10,
+	    'log': log,
+	    'manta': manta
+	};
+
+	mod_dumps.listDumps(config, function (err, results) {
+		if (err) {
+			mod_cmdutil.fail(err);
+		}
+
+		console.error(results.dl_dumps);
+		manta.close();
+	});
 }
 
 main();
