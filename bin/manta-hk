@@ -23,6 +23,7 @@ var mod_http = require('http');
 var mod_manta = require('manta');
 var mod_util = require('util');
 var printf = mod_extsprintf.printf;
+var sprintf = mod_extsprintf.sprintf;
 
 var mod_dumps = require('../lib/dumps');
 
@@ -75,8 +76,6 @@ MantaHk.prototype.do_dumps = function (subcmd, opts, args, callback)
 {
 	var config;
 
-	console.error(opts);
-	console.error(args);
 	config = {
 	    'endDate': opts.date,
 	    'ndays': opts.days,
@@ -92,7 +91,11 @@ MantaHk.prototype.do_dumps = function (subcmd, opts, args, callback)
 			mod_cmdutil.fail(err);
 		}
 
-		console.error(results.dl_dumps);
+		/*
+		 * XXX Should use an object with useful methods.
+		 * Definitely shouldn't be reaching into DumpLister.
+		 */
+		printDumpsByDate(results.dl_shards, results.dl_dumps);
 		callback();
 	});
 };
@@ -126,5 +129,81 @@ MantaHk.prototype.do_dumps.help = [
     '',
     '{{options}}'
 ].join('\n');
+
+
+function printDumpsByDate(shards, dumps)
+{
+	var dates, shardcols;
+
+	dates = Object.keys(dumps).sort();
+	shardcols = shards[0].length + 1;
+	dates.forEach(function (timestamp) {
+		var header, tsdaypart, fmt;
+
+		tsdaypart = timestamp.substr(0, '2015-07-06'.length);
+		header = sprintf('Dumps for %s', tsdaypart);
+		fmt = '    %' + shardcols + 's';
+		printf('%s', header);
+		printf('     %' + (shardcols - header.length) +
+		    's  %5s  %7s  %13s  %13s\n',
+		    'SHARD', 'MB', 'ELAPSED', 'START', 'END');
+
+		shards.forEach(function (shardname) {
+			var dump, mins, secs, starttime, endtime;
+			var startday, endday, warnings, details;
+
+			if (!dumps[timestamp].hasOwnProperty(shardname)) {
+				printf('*' + fmt + '  MISSING\n', shardname);
+				return;
+			}
+
+			dump = dumps[timestamp][shardname];
+			secs = Math.ceil(dump.ended / 1000);
+			mins = Math.floor(secs / 60);
+			secs -= (mins * 60);
+			starttime = dump.stime.toISOString().substr(
+			    '2015-07-06T'.length);
+			endtime = dump.mtime.toISOString().substr(
+			    '2015-07-06T'.length);
+
+			/*
+			 * Sanity-check dump times and warn if days don't match.
+			 */
+			startday = dump.stime.toISOString().substr(
+			    0, tsdaypart.length);
+			endday = dump.mtime.toISOString().substr(
+			    0, tsdaypart.length);
+			details = false;
+			warnings = [];
+			if (tsdaypart != startday) {
+				warnings.push('started on a different day ' +
+				    'than expected');
+				details = true;
+			}
+			if (startday != endday) {
+				warnings.push('finished on a different ' +
+				    'day than started');
+				details = true;
+			}
+
+			printf('%s' + fmt + '  %5d  %3dm%02ds  %s  %s\n',
+			    (warnings.length === 0 &&
+			    !dump.waslate) ? ' ' : '*',
+			    shardname, dump.sizemb, mins, secs,
+			    starttime, endtime);
+
+			warnings.forEach(function (msg) {
+				printf(' ' + fmt + '  warn: %s\n', '', msg);
+			});
+
+			if (details) {
+				printf('    path:  %s\n', dump.path);
+				printf('    start: %s\n', dump.stime);
+				printf('    done:  %s\n', dump.mtime);
+				return;
+			}
+		});
+	});
+}
 
 mod_cmdln.main(new MantaHk());
