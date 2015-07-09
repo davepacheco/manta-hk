@@ -1,0 +1,23 @@
+{
+	"name": "manta-hk",
+	"version": "0.0.1",
+	"description": "manage Manta housekeeping operations",
+	"author": "Joyent (joyent.com)",
+	"license": "MPL-2.0",
+	"private": true,
+	"bin": {
+	    "manta-hk": "bin/manta-hk"
+	},
+	"dependencies": {
+		"assert-plus": "^0.1.5",
+		"bunyan": "^1.4.0",
+		"extsprintf": "^1.3.0",
+		"jsprim": "^0.6.1",
+		"cmdutil": "^0.1.0",
+		"manta": "^1.5.1",
+		"posix-getopt": "^1.1.0",
+		"strsplit": "^1.0.0",
+		"verror": "^1.6.0",
+		"vasync": "^1.6.3"
+	}
+}
