@@ -350,8 +350,9 @@ function printMeteringReports(results)
 			        ' (looks too small)' : '');
 		}
 
-		printf('%20s  %d present', 'compute reports:',
-		    dayresults.compute);
+		printf('%20s  %2d/%2d present', 'compute reports:',
+		    dayresults.compute,
+		    dayresults.compute + dayresults.compute_missing.length);
 		if (dayresults.compute_missing.length > 0) {
 			printf(' (hours missing: %s%s)\n',
 			    dayresults.compute_missing.slice(
@@ -363,8 +364,9 @@ function printMeteringReports(results)
 			printf('\n');
 		}
 
-		printf('%20s  %d present', 'request reports:',
-		    dayresults.request);
+		printf('%20s  %2d/%2d present', 'request reports:',
+		    dayresults.request,
+		    dayresults.request + dayresults.request_missing.length);
 		if (dayresults.request_missing.length > 0) {
 			printf(' (hours missing: %s%s)\n',
 			    dayresults.request_missing.slice(
