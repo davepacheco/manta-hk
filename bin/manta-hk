@@ -136,7 +136,10 @@ MantaHk.prototype.do_dumps.help = [
     '',
     'The "dumps" command reports on Manatee dumps over the given date range.',
     'In the default output mode, missing or late dumps are marked with an ',
-    'asterisk ("*").',
+    'asterisk ("*").  Dumps that have not been unpacked at all are marked ',
+    'with an exclamation point ("!").  Note that the tool does not know ',
+    'how many unpacked objects are part of each dump, so it cannot tell if ',
+    'a dump has only been partially unpacked.',
     '',
     '{{options}}'
 ].join('\n');
@@ -153,18 +156,19 @@ function printDumpsByDate(shards, dumps)
 
 		tsdaypart = timestamp.substr(0, '2015-07-06'.length);
 		header = sprintf('Dumps for %s', tsdaypart);
-		fmt = '    %' + shardcols + 's';
+		fmt = '   %' + shardcols + 's';
 		printf('%s', header);
 		printf('     %' + (shardcols - header.length) +
-		    's  %5s  %7s  %13s  %13s\n',
-		    'SHARD', 'MB', 'ELAPSED', 'START', 'END');
+		    's  %5s  %7s  %13s  %s\n',
+		    'SHARD', 'MB', 'ELAPSED', 'ENDED', '#UNPACKED');
 
 		shards.forEach(function (shardname) {
-			var dump, mins, secs, starttime, endtime;
-			var startday, endday, warnings, details;
+			var dump, mins, secs, endtime;
+			var startday, endday, warnings;
+			var problem, notes;
 
 			if (!dumps[timestamp].hasOwnProperty(shardname)) {
-				printf('*' + fmt + '  MISSING\n', shardname);
+				printf('* ' + fmt + '  MISSING\n', shardname);
 				return;
 			}
 
@@ -172,10 +176,6 @@ function printDumpsByDate(shards, dumps)
 			secs = Math.ceil(dump.ended / 1000);
 			mins = Math.floor(secs / 60);
 			secs -= (mins * 60);
-			starttime = dump.stime.toISOString().substr(
-			    '2015-07-06T'.length);
-			endtime = dump.mtime.toISOString().substr(
-			    '2015-07-06T'.length);
 
 			/*
 			 * Sanity-check dump times and warn if days don't match.
@@ -184,30 +184,31 @@ function printDumpsByDate(shards, dumps)
 			    0, tsdaypart.length);
 			endday = dump.mtime.toISOString().substr(
 			    0, tsdaypart.length);
-			details = false;
+			endtime = dump.mtime.toISOString().substr(
+			    '2015-07-10T'.length);
 			warnings = [];
 			if (tsdaypart != startday) {
 				warnings.push('started on a different day ' +
 				    'than expected');
-				details = true;
 			}
 			if (startday != endday) {
 				warnings.push('finished on a different ' +
 				    'day than started');
-				details = true;
 			}
 
-			printf('%s' + fmt + '  %5d  %3dm%02ds  %s  %s\n',
-			    (warnings.length === 0 &&
-			    !dump.waslate) ? ' ' : '*',
-			    shardname, dump.sizemb, mins, secs,
-			    starttime, endtime);
+			problem = warnings.length > 0 || !dump.unpacked;
+			notes = dump.waslate;
+
+			printf('%-2s' + fmt + '  %5d  %3dm%02ds  %13s  %d\n',
+			    (problem ? '!' : '') + (notes ? '*' : ''),
+			    shardname, dump.sizemb, mins, secs, endtime,
+			    dump.objects.length);
 
 			warnings.forEach(function (msg) {
 				printf(' ' + fmt + '  warn: %s\n', '', msg);
 			});
 
-			if (details) {
+			if (warnings.length > 0) {
 				printf('    path:  %s\n', dump.path);
 				printf('    start: %s\n', dump.stime);
 				printf('    done:  %s\n', dump.mtime);
