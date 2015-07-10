@@ -26,6 +26,27 @@ var printf = mod_extsprintf.printf;
 var sprintf = mod_extsprintf.sprintf;
 
 var mod_dumps = require('../lib/dumps');
+var mod_metering = require('../lib/metering');
+
+/*
+ * Command-line option definitions common to multiple subcommands.
+ */
+var mhkCommonOptions = {
+    'date': {
+	'names': [ 'date', 'd' ],
+	'type': 'date',
+	'helpArg': 'DATE',
+	'help': 'Scan backwards from date DATE',
+	'default': new Date()
+    },
+    'days': {
+	'names': [ 'days', 'D' ],
+	'type': 'positiveInteger',
+	'helpArg': 'NDAYS',
+	'help': 'Scan backwards NDAYS from DATE',
+	'default': 5
+    }
+};
 
 /*
  * node-cmdln boilerplate
@@ -39,7 +60,6 @@ function MantaHk()
 }
 
 mod_util.inherits(MantaHk, mod_cmdln.Cmdln);
-MantaHk.showErrStack = false;
 
 /*
  * Initialization: set up logger and Manta client.
@@ -106,19 +126,10 @@ MantaHk.prototype.do_dumps = function (subcmd, opts, args, callback)
 	});
 };
 
-MantaHk.prototype.do_dumps.options = [ {
-    'names': [ 'date', 'd' ],
-    'type': 'date',
-    'helpArg': 'DATE',
-    'help': 'Scan backwards from date DATE',
-    'default': new Date()
-}, {
-    'names': [ 'days', 'D' ],
-    'type': 'positiveInteger',
-    'helpArg': 'NDAYS',
-    'help': 'Scan backwards NDAYS from DATE',
-    'default': 1
-}, {
+MantaHk.prototype.do_dumps.options = [
+    mhkCommonOptions['date'],
+    mhkCommonOptions['days'],
+{
     'names': [ 'gnuplot' ],
     'type': 'bool',
     'help': 'Emit output as a gnuplot command and data file',
@@ -264,6 +275,118 @@ function printDumpsForGnuplot(shards, dumps)
 
 		printf('\n\n');
 	});
+}
+
+MantaHk.prototype.do_metering_reports = function (subcmd, opts, args, callback)
+{
+	var config;
+
+	config = {
+	    'endDate': opts.date,
+	    'ndays': opts.days,
+	    'meteringRoot': mod_metering.defaultMeteringRoot,
+	    'concurrency': 10,
+	    'log': this.mhk_log,
+	    'manta': this.mhk_manta
+	};
+
+	mod_metering.listMeteringReports(config, function (err, result) {
+		if (err) {
+			mod_cmdutil.fail(err);
+		}
+
+		printMeteringReports(result);
+		callback();
+	});
+};
+
+MantaHk.prototype.do_metering_reports.options = [
+    mhkCommonOptions['date'],
+    mhkCommonOptions['days']
+];
+
+MantaHk.prototype.do_metering_reports.help = [
+    'List metering reports.',
+    '',
+    'The "metering-reports" command looks for generated metering reports over',
+    'the given date range (default: the last few days).  For storage and ',
+    'summary information, the command reports the number of entries in each ',
+    'report.  For compute and request metering, the command reports whether ',
+    'any expected output objects are completely missing.',
+    '',
+    '{{options}}'
+].join('\n');
+
+function printMeteringReports(results)
+{
+	var dates;
+	var minexpectedentries = 500;
+	var maxerrors = 5;
+	var maxhours = 4;
+
+	dates = Object.keys(results.byday).sort();
+	dates.forEach(function (daystamp) {
+		var dayresults;
+
+		printf('Metering reports for %s\n',
+		    daystamp.substr(0, '2015-07-10'.length));
+		dayresults = results.byday[daystamp];
+
+		if (dayresults.summary === null) {
+			printf('%20s  MISSING\n', 'summary report:');
+		} else {
+			printf('%20s  %d entries%s\n', 'summary report:',
+			    dayresults.summary,
+			    dayresults.summary < minexpectedentries ?
+			        ' (looks too small)' : '');
+		}
+
+		if (dayresults.storage === null) {
+			printf('%20s  MISSING\n', 'storage report:');
+		} else {
+			printf('%20s  %d entries%s\n', 'storage report:',
+			    dayresults.storage,
+			    dayresults.storage < minexpectedentries ?
+			        ' (looks too small)' : '');
+		}
+
+		printf('%20s  %d present', 'compute reports:',
+		    dayresults.compute);
+		if (dayresults.compute_missing.length > 0) {
+			printf(' (hours missing: %s%s)\n',
+			    dayresults.compute_missing.slice(
+			    0, maxhours).join(', '),
+			    dayresults.compute_missing.length > maxhours ?
+			    ' and ' + (dayresults.compute_missing.length -
+			    maxhours) + ' more' : '');
+		} else {
+			printf('\n');
+		}
+
+		printf('%20s  %d present', 'request reports:',
+		    dayresults.request);
+		if (dayresults.request_missing.length > 0) {
+			printf(' (hours missing: %s%s)\n',
+			    dayresults.request_missing.slice(
+			    0, maxhours).join(', '),
+			    dayresults.request_missing.length > maxhours ?
+			    ' and ' + (dayresults.request_missing.length -
+			    maxhours) + ' more' : '');
+		} else {
+			printf('\n');
+		}
+	});
+
+	if (results.errors.length > 0) {
+		results.errors.slice(0, maxerrors).forEach(function (error) {
+			mod_cmdutil.warn(error.error);
+		});
+
+		if (results.errors.length > maxerrors) {
+			mod_cmdutil.warn('and %d more errors',
+			    results.errors.length - maxerrors);
+		}
+	}
 }
 
 mod_cmdln.main(new MantaHk());
