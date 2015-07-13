@@ -8,6 +8,9 @@
 	"bin": {
 	    "manta-hk": "bin/manta-hk"
 	},
+        "directories": {
+            "man": "./man/man1"
+        },
 	"dependencies": {
 		"assert-plus": "^0.1.5",
 		"bunyan": "^1.4.0",
