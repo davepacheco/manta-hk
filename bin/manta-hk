@@ -323,14 +323,19 @@ MantaHk.prototype.do_metering_reports = function (subcmd, opts, args, callback)
 			mod_cmdutil.fail(err);
 		}
 
-		printMeteringReports(result);
+		printMeteringReports(result, opts.verbose);
 		callback();
 	});
 };
 
 MantaHk.prototype.do_metering_reports.options = [
     mhkCommonOptions['date'],
-    mhkCommonOptions['days']
+    mhkCommonOptions['days'], {
+	'names': [ 'verbose', 'v' ],
+	'type': 'bool',
+	'help': 'show status of all reports (instead of a summary)',
+	'default': false
+    }
 ];
 
 MantaHk.prototype.do_metering_reports.help = [
@@ -345,7 +350,7 @@ MantaHk.prototype.do_metering_reports.help = [
     '{{options}}'
 ].join('\n');
 
-function printMeteringReports(results)
+function printMeteringReports(results, verbose)
 {
 	var dates;
 	var minexpectedentries = 500;
@@ -382,12 +387,22 @@ function printMeteringReports(results)
 		    dayresults.compute,
 		    dayresults.compute + dayresults.compute_missing.length);
 		if (dayresults.compute_missing.length > 0) {
-			printf(' (hours missing: %s%s)\n',
-			    dayresults.compute_missing.slice(
-			    0, maxhours).join(', '),
-			    dayresults.compute_missing.length > maxhours ?
-			    ' and ' + (dayresults.compute_missing.length -
-			    maxhours) + ' more' : '');
+			if (verbose) {
+				printf('\n');
+				dayresults.compute_missing.forEach(
+				    function (h) {
+					printf('%20s  hour %02d - missing\n',
+					    '', h);
+				    });
+			} else {
+				printf(' (hours missing: %s%s)\n',
+				    dayresults.compute_missing.slice(
+				    0, maxhours).join(', '),
+				    dayresults.compute_missing.length >
+				    maxhours ?  ' and ' +
+				    (dayresults.compute_missing.length -
+				    maxhours) + ' more' : '');
+			}
 		} else {
 			printf('\n');
 		}
@@ -396,12 +411,22 @@ function printMeteringReports(results)
 		    dayresults.request,
 		    dayresults.request + dayresults.request_missing.length);
 		if (dayresults.request_missing.length > 0) {
-			printf(' (hours missing: %s%s)\n',
-			    dayresults.request_missing.slice(
-			    0, maxhours).join(', '),
-			    dayresults.request_missing.length > maxhours ?
-			    ' and ' + (dayresults.request_missing.length -
-			    maxhours) + ' more' : '');
+			if (verbose) {
+				printf('\n');
+				dayresults.request_missing.forEach(
+				    function (h) {
+					printf('%20s  hour %02d - missing\n',
+					    '', h);
+				    });
+			} else {
+				printf(' (hours missing: %s%s)\n',
+				    dayresults.request_missing.slice(
+				    0, maxhours).join(', '),
+				    dayresults.request_missing.length >
+				    maxhours ?  ' and ' +
+				    (dayresults.request_missing.length -
+				    maxhours) + ' more' : '');
+			}
 		} else {
 			printf('\n');
 		}
