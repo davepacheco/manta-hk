@@ -11,6 +11,12 @@ manta-hk dumps [--date DATE] [--ndays NDAYS] [--shard SHARDNAME]
 
 manta-hk metering-reports [--date DATE] [--ndays NDAYS]
 
+manta-hk dircount-audit launch [--date DATE]
+
+manta-hk dircount-audit list 
+
+manta-hk dircount-audit report JOBID
+
 ## DESCRIPTION
 
 Manta housekeeping operations comprise a pipeline that starts with daily
@@ -22,7 +28,8 @@ historical reasons, this pipeline is currently time-based rather than
 dependency-based.  As a result, when one step takes too long (e.g., dump
 uploading), the pipeline either stops or (in some cases) produces incomplete
 output.  This tool exists to assess the status of these operations and to check
-for common causes of pipeline issues.
+for common causes of pipeline issues.  This tool also contains commands for
+other ad-hoc housekeeping operations that are not normally required.
 
 **The options and output of this command are not committed.  This command should
 not be used programmatically.**
@@ -38,21 +45,35 @@ The "metering-reports" subcommand examines the metering reports produced
 regularly by Manta and reports for a given date range which reports are missing
 or may be incomplete.
 
-Both of these subcommands use the public interface to Manta to examine data
-stored in Manta itself.  This data is available only to operator accounts.  The
-`MANTA_URL`, `MANTA_USER`, and `MANTA_KEY_ID` environment variables must be set
-as you would set them to use the Manta command-line tools (e.g., mls(1)).
+The "dircount-audit" subcommands allows operators to launch, list, and summarize
+the results of jobs used to audit directory counts.  As a result of previous
+software defects, directory counts in the metadata tier could become incorrect.
+The "dircount-audit launch" subcommand locates database backups for the given
+day and launches jobs on these objects that compare the actual and reported
+directory counts.  The "dircount-audit list" subcommand lists running or
+recently-run jobs started with "dircount-audit launch".  The "dircount-audit
+report" subcommand summarizes the results.
+
+All invocations of this tool use the public interface to Manta to examine data
+stored in Manta itself.  This data is available only to operator accounts.  Some
+invocations of this tool also manage jobs.  The `MANTA_URL`, `MANTA_USER`, and
+`MANTA_KEY_ID` environment variables must be set as you would set them to use
+the Manta command-line tools (e.g., mls(1)) as an operator.
 
 
 ## OPTIONS
 
 `-d, --date DATE`
-  Specifies the end of the date range to examine.  DATE should be an ISO 8601
-  timestamp that includes at least the full date part (e.g.,
-  "2015-07-13T00:00:00Z" or just "2015-07-13").  For the "dumps" command, the
-  time part will be ignored.  With `-D, --days NDAYS`, manta-hk will examine
-  information for the NDAYS preceding DATE (including DATE) itself.  The
-  default is the current date.
+  For "dumps" and "metering-reports", specifies the end of the date range to
+  examine.  For "dircount-audit launch", specifies which day's database dumps to
+  audit.  DATE should be an ISO 8601 timestamp that includes at least the full
+  date part (e.g., "2015-07-13T00:00:00Z" or just "2015-07-13").  For the
+  "dumps" command, the time part will be ignored.  With `-D, --days NDAYS`,
+  manta-hk will examine information for the NDAYS preceding DATE (including
+  DATE) itself.  The default is the most recent reasonable date.  For "dumps"
+  and "metering-reports", that's the current date.  For "dircount-audit launch",
+  that's today if the dumps are expected to be present already, or else
+  yesterday.
 
 `-D, --days NDAYS`
   Specifies how many days before DATE should be examined.  The default is a few

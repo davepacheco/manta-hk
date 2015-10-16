@@ -23,7 +23,9 @@ NPM		 = npm
 #
 # Files
 #
-JS_FILES	:= bin/manta-hk $(shell find lib -name '*.js')
+JS_FILES	:= bin/manta-hk \
+    $(shell find lib -name '*.js' \
+        -not -path 'lib/job-assets/*/node_modules/*')
 JSL_FILES_NODE	 = $(JS_FILES)
 JSSTYLE_FILES	 = $(JS_FILES)
 JSL_CONF_NODE	 = tools/jsl.node.conf

@@ -27,6 +27,7 @@ var sprintf = mod_extsprintf.sprintf;
 
 var mod_dumps = require('../lib/dumps');
 var mod_metering = require('../lib/metering');
+var mod_dcaudit = require('../lib/dcaudit');
 
 /*
  * Command-line option definitions common to multiple subcommands.
@@ -443,5 +444,112 @@ function printMeteringReports(results, verbose)
 		}
 	}
 }
+
+MantaHk.prototype.do_dircount_audit = MantaHkDcAudit;
+
+function MantaHkDcAudit(parent)
+{
+	this.dca_parent = parent;
+
+	mod_cmdln.Cmdln.call(this, {
+	    'name': 'manta-hk dircount-audit',
+	    'desc': 'audit directory counts'
+	});
+}
+
+mod_util.inherits(MantaHkDcAudit, mod_cmdln.Cmdln);
+
+MantaHkDcAudit.prototype.do_launch = function (subcmd, opts, args, callback)
+{
+	var date;
+
+	if (opts.date) {
+		date = opts.date;
+	} else {
+		date = new Date();
+		if (date.getUTCHours() < 8) {
+			/*
+			 * Before 0800Z, use yesterday's dump.  They're
+			 * currently allotted two hours to upload and six hours
+			 * to unpack.
+			 */
+			date.setUTCDate(date.getUTCDate() - 1);
+		}
+	}
+
+	if (args.length === 0) {
+		mod_cmdutil.fail('missing argument');
+	} else if (args.length > 1) {
+		mod_cmdutil.fail('unexpected arguments');
+	}
+
+	console.error('looking for database backups from %s',
+	    date.toISOString());
+	mod_dcaudit.launchDcAuditJob({
+	    'date': new Date(),
+	    'shard': args[0],
+	    'dumpRoot': mod_dumps.defaultDumpRoot,
+	    'log': this.dca_parent.mhk_log,
+	    'manta': this.dca_parent.mhk_manta,
+	    'dryRun': opts.dryrun,
+	    'jobsList': mod_dcaudit.defaultJobsListPath
+	}, callback);
+};
+
+MantaHkDcAudit.prototype.do_launch.options = [ {
+    'names': mhkCommonOptions['date']['names'],
+    'type': mhkCommonOptions['date']['type'],
+    'helpArg': mhkCommonOptions['date']['helpArg'],
+    'help': 'Use database dumps from date DATE'
+}, {
+    'names': [ 'dryrun', 'n' ],
+    'type': 'bool',
+    'help': 'Create job, but add no inputs so that it does nothing'
+} ];
+
+MantaHkDcAudit.prototype.do_launch.help = [
+    'Launches a job to audit directory counts.',
+    '',
+    '    {{name}} launch [--date | -D DATE] [-n | --dryrun] SHARDNAME',
+    '',
+    'The Manta metadata tier keeps track of the number of entries in each ',
+    'directory in order to quickly provide this information to clients.  As ',
+    'a result of previous software defects, these counts could become ',
+    'incorrect.  This subcommand launches one or more jobs to audit these ',
+    'counts, using the daily database backups to avoid impacting the metadata ',
+    'tier itself.  Use the "list" and "report" subcommands to see the results ',
+    'of these jobs.',
+    '',
+    '{{options}}'
+].join('\n');
+
+
+MantaHkDcAudit.prototype.do_list = function (subcmd, opts, args, callback)
+{
+	mod_dcaudit.listDcAuditJobs({
+	    'log': this.dca_parent.mhk_log,
+	    'manta': this.dca_parent.mhk_manta,
+	    'jobsList': mod_dcaudit.defaultJobsListPath
+	}, function (err, rows) {
+		if (err) {
+			callback(err);
+			return;
+		}
+
+		/* XXX */
+		console.log(rows);
+		callback();
+	});
+};
+
+MantaHkDcAudit.prototype.do_list.options = [];
+
+MantaHkDcAudit.prototype.do_list.help = [
+    'Lists recent jobs to audit directory counts.',
+    '',
+    '    {{name}} list',
+    '',
+    'See help for the "{{name}} launch" for details.'
+].join('\n');
 
 mod_cmdln.main(new MantaHk());
