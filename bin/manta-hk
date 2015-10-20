@@ -22,6 +22,7 @@ var mod_jsprim = require('jsprim');
 var mod_http = require('http');
 var mod_manta = require('manta');
 var mod_util = require('util');
+var mod_tab = require('tab');
 var printf = mod_extsprintf.printf;
 var sprintf = mod_extsprintf.sprintf;
 
@@ -530,14 +531,67 @@ MantaHkDcAudit.prototype.do_list = function (subcmd, opts, args, callback)
 	    'log': this.dca_parent.mhk_log,
 	    'manta': this.dca_parent.mhk_manta,
 	    'jobsList': mod_dcaudit.defaultJobsListPath
-	}, function (err, rows) {
+	}, function (err, joblist) {
 		if (err) {
 			callback(err);
 			return;
 		}
 
-		/* XXX */
-		console.log(rows);
+		var tab;
+
+		tab = new mod_tab.TableOutputStream({
+		    'columns': [ {
+			'label': 'JOBID',
+			'width': 36
+		    }, {
+			'label': 'SHARD',
+			'width': 25
+		    }, {
+			'label': 'DUMP',
+			'width': 10
+		    }, {
+		        'label': 'RESULT'
+		    } ]
+		});
+
+		joblist['jobs'].forEach(function (job) {
+			var result;
+
+
+			if (job['state']) {
+				switch (job['state']['state']) {
+				case 'queued':
+				case 'running':
+					result = 'run';
+					break;
+
+				case 'done':
+					if (job['state']['stats'][
+					    'errors'] === 0) {
+						result = 'ok';
+					} else {
+						result = 'fail';
+					}
+					break;
+
+				default:
+					result = 'unknown';
+					break;
+				}
+			} else {
+				result = 'unknown';
+				mod_cmdutil.warn(job['error']);
+			}
+
+			tab.writeRow({
+			    'JOBID': job['jobPath'],
+			    'SHARD': job['inputShard'],
+			    'DUMP': job['inputDate'].substr(
+			        0, '2015-10-20'.length),
+			    'RESULT': result
+			});
+		});
+
 		callback();
 	});
 };
