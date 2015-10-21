@@ -489,7 +489,7 @@ MantaHkDcAudit.prototype.do_launch = function (subcmd, opts, args, callback)
 	console.error('looking for database backups from %s',
 	    date.toISOString());
 	mod_dcaudit.launchDcAuditJob({
-	    'date': new Date(),
+	    'date': date,
 	    'shard': args[0],
 	    'dumpRoot': mod_dumps.defaultDumpRoot,
 	    'log': this.dca_parent.mhk_log,
