@@ -456,7 +456,7 @@ function MantaHkDcAudit(parent)
 
 	mod_cmdln.Cmdln.call(this, {
 	    'name': 'manta-hk dircount-audit',
-	    'desc': 'audit directory counts'
+	    'desc': 'Audit directory counts'
 	});
 }
 
@@ -664,7 +664,7 @@ MantaHkDcAudit.prototype.do_report = function (subcmd, opts, args, callback)
 MantaHkDcAudit.prototype.do_report.options = [];
 
 MantaHkDcAudit.prototype.do_report.help = [
-    'Show summary information about a completed directory count audit job.',
+    'Summarize a completed directory count audit job.',
     '',
     '    {{name}} report JOBID',
     '',
