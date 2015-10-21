@@ -18,11 +18,13 @@ var mod_bunyan = require('bunyan');
 var mod_cmdln = require('cmdln');
 var mod_cmdutil = require('cmdutil');
 var mod_extsprintf = require('extsprintf');
-var mod_jsprim = require('jsprim');
 var mod_http = require('http');
+var mod_jsprim = require('jsprim');
+var mod_lstream = require('lstream');
 var mod_manta = require('manta');
 var mod_util = require('util');
 var mod_tab = require('tab');
+var mod_vstream_json_parser = require('vstream-json-parser');
 var printf = mod_extsprintf.printf;
 var sprintf = mod_extsprintf.sprintf;
 
@@ -629,9 +631,33 @@ MantaHkDcAudit.prototype.do_report = function (subcmd, opts, args, callback)
 			return;
 		}
 
-		/* XXX */
-		console.error(report);
-		callback();
+		var lineparser, jsonparser;
+		var rowsbycat = { 'errors': {}, 'warnings': {} };
+
+		lineparser = new mod_lstream();
+		report.rawStream.pipe(lineparser);
+
+		jsonparser = new mod_vstream_json_parser();
+		lineparser.pipe(jsonparser);
+
+		jsonparser.on('data', function (entry) {
+			var cat, subcat;
+
+			subcat = entry['status'];
+			cat = mod_jsprim.startsWith(subcat, 'warn:') ?
+			    'warnings' : 'errors';
+
+			if (!rowsbycat[cat].hasOwnProperty(subcat)) {
+				rowsbycat[cat][subcat] = [];
+			}
+
+			rowsbycat[cat][subcat].push(entry);
+		});
+
+		jsonparser.on('end', function () {
+			printDcAuditReport(rowsbycat);
+			callback();
+		});
 	});
 };
 
@@ -644,6 +670,63 @@ MantaHkDcAudit.prototype.do_list.help = [
     '',
     'See help for the "{{name}} launch" for details.'
 ].join('\n');
+
+
+/*
+ * Print a summary of incorrect or missing directory entries.  The input data
+ * structure has two keys: 'errors' and 'warnings', each of which is an object
+ * with properties representing distinct failure modes.  The values of these
+ * properties are arrays of entries.  For example:
+ *
+ *     {
+ *         "errors": {
+ *             "error: count mismatch": [ {
+ *                 "dirname": ...
+ *                 "ndirents": 1500,
+ *                 "nreported": 1498,
+ *                 "status": "error: count mismatch"
+ *             } ]
+ *         },
+ *     }
+ */
+function printDcAuditReport(rowsbycat)
+{
+	var subcat, entries, abbr;
+	var nshown = 5;
+
+	for (subcat in rowsbycat['errors']) {
+		entries = rowsbycat['errors'][subcat];
+		entries.sort(function (a, b) {
+			return (a['dirname'].localeCompare(b['dirname']));
+		});
+
+		printf('ERROR: %6d entries: %s\n', entries.length, subcat);
+		printf('      %8s %8s %s\n',
+		    'ACTUAL', 'REPORTED', 'DIRECTORY');
+		entries.forEach(function (e) {
+			printf('      %8d %8d %s\n', e['ndirents'],
+			    e['nreported'], e['dirname']);
+		});
+		printf('\n');
+	}
+
+	for (subcat in rowsbycat['warnings']) {
+		entries = rowsbycat['warnings'][subcat];
+		entries.sort(function (a, b) {
+			return (a['dirname'].localeCompare(b['dirname']));
+		});
+		abbr = entries.slice(0, nshown);
+
+		printf('WARNING: %6d entries: %s\n', entries.length, subcat);
+		abbr.forEach(function (e) {
+			printf('      %s\n',  e['dirname']);
+		});
+		if (abbr.length < entries.length) {
+			printf('      ...\n');
+		}
+		printf('\n');
+	}
+}
 
 
 mod_cmdln.main(new MantaHk());
