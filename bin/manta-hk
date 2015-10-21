@@ -661,12 +661,12 @@ MantaHkDcAudit.prototype.do_report = function (subcmd, opts, args, callback)
 	});
 };
 
-MantaHkDcAudit.prototype.do_list.options = [];
+MantaHkDcAudit.prototype.do_report.options = [];
 
-MantaHkDcAudit.prototype.do_list.help = [
-    'Lists recent jobs to audit directory counts.',
+MantaHkDcAudit.prototype.do_report.help = [
+    'Show summary information about a completed directory count audit job.',
     '',
-    '    {{name}} list',
+    '    {{name}} report JOBID',
     '',
     'See help for the "{{name}} launch" for details.'
 ].join('\n');
