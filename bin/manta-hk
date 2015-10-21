@@ -527,6 +527,10 @@ MantaHkDcAudit.prototype.do_launch.help = [
 
 MantaHkDcAudit.prototype.do_list = function (subcmd, opts, args, callback)
 {
+	if (args.length > 0) {
+		mod_cmdutil.fail('unexpected arguments');
+	}
+
 	mod_dcaudit.listDcAuditJobs({
 	    'log': this.dca_parent.mhk_log,
 	    'manta': this.dca_parent.mhk_manta,
@@ -605,5 +609,41 @@ MantaHkDcAudit.prototype.do_list.help = [
     '',
     'See help for the "{{name}} launch" for details.'
 ].join('\n');
+
+
+MantaHkDcAudit.prototype.do_report = function (subcmd, opts, args, callback)
+{
+	if (args.length === 0) {
+		mod_cmdutil.fail('missing argument');
+	} else if (args.length > 1) {
+		mod_cmdutil.fail('unexpected arguments');
+	}
+
+	mod_dcaudit.reportDcAuditJob({
+	    'log': this.dca_parent.mhk_log,
+	    'manta': this.dca_parent.mhk_manta,
+	    'jobPath': args[0]
+	}, function (err, report) {
+		if (err) {
+			callback(err);
+			return;
+		}
+
+		/* XXX */
+		console.error(report);
+		callback();
+	});
+};
+
+MantaHkDcAudit.prototype.do_list.options = [];
+
+MantaHkDcAudit.prototype.do_list.help = [
+    'Lists recent jobs to audit directory counts.',
+    '',
+    '    {{name}} list',
+    '',
+    'See help for the "{{name}} launch" for details.'
+].join('\n');
+
 
 mod_cmdln.main(new MantaHk());
