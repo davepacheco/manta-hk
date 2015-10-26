@@ -615,6 +615,8 @@ MantaHkDcAudit.prototype.do_list.help = [
 
 MantaHkDcAudit.prototype.do_report = function (subcmd, opts, args, callback)
 {
+	var nexamples = 10;
+
 	if (args.length === 0) {
 		mod_cmdutil.fail('missing argument');
 	} else if (args.length > 1) {
@@ -632,7 +634,12 @@ MantaHkDcAudit.prototype.do_report = function (subcmd, opts, args, callback)
 		}
 
 		var lineparser, jsonparser;
-		var rowsbycat = { 'errors': {}, 'warnings': {} };
+		var rowsbycat;
+
+		console.error('downloading %s bytes',
+		    report['outputObjectSize'] || 'unknown');
+
+		rowsbycat = { 'errors': {}, 'warnings': {} };
 
 		lineparser = new mod_lstream();
 		report.rawStream.pipe(lineparser);
@@ -641,17 +648,24 @@ MantaHkDcAudit.prototype.do_report = function (subcmd, opts, args, callback)
 		lineparser.pipe(jsonparser);
 
 		jsonparser.on('data', function (entry) {
-			var cat, subcat;
+			var cat, subcat, kindinfo;
 
 			subcat = entry['status'];
 			cat = mod_jsprim.startsWith(subcat, 'warn:') ?
 			    'warnings' : 'errors';
 
 			if (!rowsbycat[cat].hasOwnProperty(subcat)) {
-				rowsbycat[cat][subcat] = [];
+				rowsbycat[cat][subcat] = {
+				    'count': 0,
+				    'entries': []
+				};
 			}
 
-			rowsbycat[cat][subcat].push(entry);
+			kindinfo = rowsbycat[cat][subcat];
+			kindinfo['count']++;
+			if (kindinfo['entries'].length < nexamples) {
+				kindinfo['entries'].push(entry);
+			}
 		});
 
 		jsonparser.on('end', function () {
@@ -676,52 +690,58 @@ MantaHkDcAudit.prototype.do_report.help = [
  * Print a summary of incorrect or missing directory entries.  The input data
  * structure has two keys: 'errors' and 'warnings', each of which is an object
  * with properties representing distinct failure modes.  The values of these
- * properties are arrays of entries.  For example:
+ * properties include a count and some example entries.  For example:
  *
  *     {
  *         "errors": {
- *             "error: count mismatch": [ {
- *                 "dirname": ...
- *                 "ndirents": 1500,
- *                 "nreported": 1498,
- *                 "status": "error: count mismatch"
- *             } ]
+ *             "error: count mismatch": {
+ *                 "count": "147",
+ *                 "entries": [ {
+ *                     "dirname": ...
+ *                     "ndirents": 1500,
+ *                     "nreported": 1498,
+ *                     "status": "error: count mismatch"
+ *                 } ]
+ *             }
  *         },
  *     }
  */
 function printDcAuditReport(rowsbycat)
 {
-	var subcat, entries, abbr;
-	var nshown = 5;
+	var subcat, kindinfo, entries;
 
 	for (subcat in rowsbycat['errors']) {
-		entries = rowsbycat['errors'][subcat];
+		kindinfo = rowsbycat['errors'][subcat];
+		entries = kindinfo['entries'];
 		entries.sort(function (a, b) {
 			return (a['dirname'].localeCompare(b['dirname']));
 		});
 
-		printf('ERROR: %6d entries: %s\n', entries.length, subcat);
+		printf('ERROR: %6d entries: %s\n', kindinfo['count'], subcat);
 		printf('      %8s %8s %s\n',
 		    'ACTUAL', 'REPORTED', 'DIRECTORY');
 		entries.forEach(function (e) {
 			printf('      %8d %8d %s\n', e['ndirents'],
 			    e['nreported'], e['dirname']);
 		});
+		if (entries.length < kindinfo['count']) {
+			printf('      ...\n');
+		}
 		printf('\n');
 	}
 
 	for (subcat in rowsbycat['warnings']) {
-		entries = rowsbycat['warnings'][subcat];
+		kindinfo = rowsbycat['warnings'][subcat];
+		entries = kindinfo['entries'];
 		entries.sort(function (a, b) {
 			return (a['dirname'].localeCompare(b['dirname']));
 		});
-		abbr = entries.slice(0, nshown);
 
-		printf('WARNING: %6d entries: %s\n', entries.length, subcat);
-		abbr.forEach(function (e) {
+		printf('WARNING: %6d entries: %s\n', kindinfo['count'], subcat);
+		entries.forEach(function (e) {
 			printf('      %s\n',  e['dirname']);
 		});
-		if (abbr.length < entries.length) {
+		if (entries.length < kindinfo['count']) {
 			printf('      ...\n');
 		}
 		printf('\n');
