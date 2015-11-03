@@ -749,7 +749,9 @@ function printDcAuditReport(rowsbycat)
 	}
 }
 
-
+/*
+ * Generate a SQL file to repair broken directory counts.
+ */
 MantaHkDcAudit.prototype.do_genfix = function (subcmd, opts, args, callback)
 {
 	if (args.length === 0) {
