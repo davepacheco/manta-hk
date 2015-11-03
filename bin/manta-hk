@@ -521,7 +521,8 @@ MantaHkDcAudit.prototype.do_launch.help = [
     'incorrect.  This subcommand launches one or more jobs to audit these ',
     'counts, using the daily database backups to avoid impacting the metadata ',
     'tier itself.  Use the "list" and "report" subcommands to see the results ',
-    'of these jobs.',
+    'of these jobs.  Use the "genfix" subcommand to generate a SQL file to ',
+    'repair these counts.',
     '',
     '{{options}}'
 ].join('\n');
@@ -747,6 +748,64 @@ function printDcAuditReport(rowsbycat)
 		printf('\n');
 	}
 }
+
+
+MantaHkDcAudit.prototype.do_genfix = function (subcmd, opts, args, callback)
+{
+	if (args.length === 0) {
+		mod_cmdutil.fail('missing argument');
+	} else if (args.length > 1) {
+		mod_cmdutil.fail('unexpected arguments');
+	}
+
+	mod_dcaudit.reportDcAuditJob({
+	    'log': this.dca_parent.mhk_log,
+	    'manta': this.dca_parent.mhk_manta,
+	    'jobPath': args[0]
+	}, function (err, report) {
+		if (err) {
+			callback(err);
+			return;
+		}
+
+		var lineparser, jsonparser, fixer;
+
+		console.error('downloading %s bytes',
+		    report['outputObjectSize'] || 'unknown');
+
+		lineparser = new mod_lstream();
+		report.rawStream.pipe(lineparser);
+
+		jsonparser = new mod_vstream_json_parser();
+		lineparser.pipe(jsonparser);
+
+		fixer = new mod_dcaudit.DircountFixerStream();
+		jsonparser.pipe(fixer);
+
+		fixer.pipe(process.stdout);
+
+		fixer.on('end', function () {
+			callback();
+		});
+
+		fixer.on('warn', function (context, kind, warnerr) {
+			console.error('%s: %s', context.label(),
+			    warnerr.message);
+		});
+
+		fixer.on('error', mod_cmdutil.fail);
+	});
+};
+
+MantaHkDcAudit.prototype.do_genfix.options = [];
+
+MantaHkDcAudit.prototype.do_genfix.help = [
+    'Generate a SQL file to repair directory counts.',
+    '',
+    '    {{name}} genfix JOBID',
+    '',
+    'See help for the "{{name}} launch" for details.'
+].join('\n');
 
 
 mod_cmdln.main(new MantaHk());

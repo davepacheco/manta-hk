@@ -17,6 +17,8 @@ manta-hk dircount-audit list
 
 manta-hk dircount-audit report JOBID
 
+manta-hk dircount-audit genfix JOBID
+
 ## DESCRIPTION
 
 Manta housekeeping operations comprise a pipeline that starts with daily
@@ -46,14 +48,16 @@ regularly by Manta and reports for a given date range which reports are missing
 or may be incomplete.
 
 The "dircount-audit" subcommands allows operators to launch, list, and summarize
-the results of jobs used to audit directory counts.  As a result of previous
-software defects, directory counts in the metadata tier could become incorrect.
-The "dircount-audit launch" subcommand locates database backups for the given
-day and launches jobs on these objects that compare the actual and reported
-directory counts.  The "dircount-audit list" subcommand lists running or
-recently-run jobs started with "dircount-audit launch".  The "dircount-audit
-report" subcommand summarizes the results.  For more, see "Directory count audit
-jobs" below.
+the results of jobs used to audit directory counts and to generate commands to
+repair these counts.  As a result of previous software defects, directory counts
+in the metadata tier could become incorrect.  The "dircount-audit launch"
+subcommand locates database backups for the given day and launches jobs on these
+objects that compare the actual and reported directory counts.  The
+"dircount-audit list" subcommand lists running or recently-run jobs started with
+"dircount-audit launch".  The "dircount-audit report" subcommand summarizes the
+results.  The "dircount-audit genfix" subcommand generates SQL commands to
+repair incorrect directory counts.  For more, see "Directory count audit jobs"
+below.
 
 All invocations of this tool use the public interface to Manta to examine data
 stored in Manta itself.  This data is available only to operator accounts.  Some
@@ -67,29 +71,34 @@ the Manta command-line tools (e.g., mls(1)) as an operator.
 The "dircount-audit report" command reports the number of directories with
 incorrect size counts.  For each directory, there are five possible states:
 
-    "count okay"
+"count okay"
 
-        The reported (saved) directory count matches the number of entries in
-        the directory.  This is only shown when the job was run in verbose
-        mode.
+    The reported (saved) directory count matches the number of entries in
+    the directory.  This is only shown when the job was run in verbose
+    mode.
 
-    "warn: leaked optimized count"
+"warn: leaked optimized count"
 
-        There are no entries in the directory (possibly because it does not
-        exist), and there's a reported (saved) directory count of 0.  While the
-        reported count matches the actual count, there are not supposed to be
-        any reported counts of zero.  Counts are supposed to be removed when
-        they reach zero.  Thus, the counter for this entry is leaked.
+    There are no entries in the directory (possibly because it does not
+    exist), and there's a reported (saved) directory count of 0.  While the
+    reported count matches the actual count, there are not supposed to be
+    any reported counts of zero.  Counts are supposed to be removed when
+    they reach zero.  Thus, the counter for this entry is leaked.
 
-    "error: count mismatch (no optimized count)"
+"error: count mismatch (no optimized count)"
 
-        There are entries in the directory, but the reported count is zero
-        because there is no saved count.
+    There are entries in the directory, but the reported count is zero
+    because there is no saved count.
 
-    "error: count mismatch"
+"error: count mismatch (no entries)"
 
-        There are entries in the directory, and there is a saved count for
-        the directory, but the two counts do not match.
+    There are no entries in the directory, but there's a non-zero reported
+    count.
+
+"error: count mismatch"
+
+    There are entries in the directory, and there is a saved count for
+    the directory, but the two counts do not match.
 
 
 ## OPTIONS

@@ -1,0 +1,47 @@
+#!/bin/bash
+
+#
+# pginit PATH DBNAME [USER]: initialize a throw-away postgres database at path
+# PATH.  Inspired by
+# http://www.postgresql.org/docs/9.2/static/install-short.html.
+#
+
+if [[ $# -ne 2 && $# -ne 3 ]]; then
+        echo "usage: $(basename ${BASH_SOURCE[0]}) PATH DBNAME [USER]" >&2
+        exit 2
+fi
+
+dbpath="$1"
+dbname="$2"
+dbuser="${3-nobody}"
+
+count=0
+timeout=30
+
+set -o xtrace
+set -o pipefail
+set -o errexit
+
+if [[ -e "$dbpath" ]]; then
+	echo "pginit: directory already exists: $dbpath"
+	exit 1
+fi
+
+mkdir -p "$dbpath"
+chown "$dbuser" "$dbpath"
+
+su "$dbuser" -c "initdb -D \"$dbpath\""
+su "$dbuser" -c "postgres -D \"$dbpath\" > \"$dbpath/logfile\" 2>&1" &
+
+for (( count = 0; count < timeout; count++ )) {
+	if su "$dbuser" -c "createdb \"$dbname\""; then
+		break
+	fi
+
+	sleep 1
+}
+
+if [[ $count -eq $timeout ]]; then
+	echo "timed out waiting for PostgreSQL" >&2
+	exit 1
+fi

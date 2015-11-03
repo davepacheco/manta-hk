@@ -1,0 +1,66 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+/*
+ * Copyright (c) 2015, Joyent, Inc.
+ */
+
+/*
+ * NOTE: SQL-style to-end-of-line comments (starting with two hyphens) are NOT
+ * supported in this file due to MORAY-317.  Use multiline C-style comments.
+ */
+
+/*
+ * manta_hk_dcrepair(UDIRNAME): given a directory name "UDIRNAME" in the "manta"
+ * table, update the corresponding counter in the "manta_directory_counts"
+ * table.  This may fail or produce an incorrect result in the face of
+ * concurrent activity on the directory, but this is not expected to be common
+ * for the directories that currently have broken counts, and repeated
+ * executions of this function should converge to the correct value.
+ */
+CREATE OR REPLACE FUNCTION manta_hk_dcrepair(udirname TEXT)
+    RETURNS VOID AS
+    $FunctionCode$
+    DECLARE tmpcount NUMERIC;
+    DECLARE foundvnode bigint;
+    BEGIN
+        /*
+         * This approach is subject to races: the actual count may change
+         * between when we read it here and when we apply it below.  See the
+         * note above.
+         */
+        tmpcount := (SELECT count(*) FROM manta WHERE dirname = udirname);
+        IF tmpcount = 0 THEN
+                DELETE FROM manta_directory_counts WHERE _key = udirname;
+                RAISE NOTICE 'manta_hk_dcrepair: %: removed count', udirname;
+                RETURN;
+        END IF;
+
+        UPDATE manta_directory_counts
+        SET entries = tmpcount
+        WHERE _key = udirname; 
+        IF FOUND THEN
+                RAISE NOTICE 'manta_hk_dcrepair: %s: updated count to %',
+                    udirname, tmpcount;
+                RETURN;
+        END IF;
+
+        /*
+         * The row was not present.  Try to insert it.  We need to get
+         * information from the actual directory entry.  The SELECT will fail if
+         * it does not return exactly one value, and the INSERT will fail if we
+         * raced with certain other activity on the directory.  That's okay --
+         * the point is for this process to eventually converge.
+         */
+        SELECT _vnode INTO STRICT foundvnode FROM manta WHERE _key = udirname;
+        INSERT INTO manta_directory_counts
+            (_key, _value, _etag, _vnode, entries)
+        VALUES
+            (udirname, '{}', '_trigger', foundvnode, tmpcount);
+        RAISE NOTICE 'manta_hk_dcrepair: %s: inserted new count of %',
+            udirname, tmpcount;
+    END;
+    $FunctionCode$ LANGUAGE plpgsql;

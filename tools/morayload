@@ -1,0 +1,35 @@
+#!/bin/bash
+
+#
+# morayload DUMPFILE: given a database dump file, create a throw-away
+# PostgreSQL database from that file.
+#
+
+set -o pipefail
+set -o errexit
+
+if [[ $# -eq 0 ]]; then
+	echo "usage: $(basename ${BASH_SOURCE[0]}) DUMPFILE" >&2
+	exit 2
+fi
+
+set -o xtrace
+
+#
+# pginit takes care of initializing a throwaway database.
+#
+pginit /testdb moray
+
+#
+# The "postgres" and "moray" roles must be present in order to load the file.
+#
+su nobody -c 'psql moray -c "create role moray;"'
+su nobody -c 'psql moray -c "create role postgres;"'
+
+#
+# Load the dump file.
+#
+if ! gzcat "$1" | su nobody -c "psql -v ON_ERROR_STOP=1 moray"; then
+	echo "load failed!"
+	exit 1
+fi
